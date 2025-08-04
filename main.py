@@ -2,7 +2,6 @@ import pygame
 import sys
 import random
 import math
-import time
 
 pygame.init()
 
@@ -16,17 +15,26 @@ WIDTH, HEIGHT = 800, 640
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Nuclear Fission Simulation")
 
-BG_COLOR = (10, 10, 20)
-NEUTRON_COLOR = (0, 255, 255)
-
-clock = pygame.time.Clock()
 FPS = 60
-PURITY=0.05
-NON_FISSILE=0.01
+sim_time = 0
+GRID_CELL_SIZE = 20
+
 NEUTRON_RADIUS = 4
 NEUTRON_SPEED = 1
-GRID_CELL_SIZE = 20
-sim_time = 0
+NEUTRON_COLOR = (0, 255, 255)
+
+URANIUM_RADIUS = 6
+PURITY = 0.05
+NON_FISSILE = 0.01
+REACTIVATION_DELAY_MIN = 1
+REACTIVATION_DELAY_MAX = 10
+COLLISION_DISTANCE = URANIUM_RADIUS + NEUTRON_RADIUS
+
+BG_COLOR = (10, 10, 20)
+FISSILE_COLOR = (0, 255, 0)
+NONFISSILE_COLOR = (100, 100, 100)
+INACTIVE_COLOR = (21, 71, 52)
+
 RIGHT = 0
 DOWN = math.pi / 2
 LEFT = math.pi
@@ -35,6 +43,8 @@ UP_RIGHT = math.pi / 4
 DOWN_RIGHT = math.pi / 4 + math.pi / 2
 DOWN_LEFT = 3 * math.pi / 4
 UP_LEFT = 5 * math.pi / 4
+
+clock = pygame.time.Clock()
 
 def XgridToPos(gridx):
     return gridx*GRID_CELL_SIZE
@@ -79,16 +89,16 @@ class Uranium:
     def draw(self, surface):
         if self.active:
             if self.fissile:
-                color = (0, 255, 0)
+                color = FISSILE_COLOR
             else:
-                color = (100, 100, 100)
+                color = NONFISSILE_COLOR
         else:
-            color = (21,71,52)
-        pygame.draw.circle(surface, color, (self.x, self.y), 6)
+            color = INACTIVE_COLOR
+        pygame.draw.circle(surface, color, (self.x, self.y), URANIUM_RADIUS)
 
     def deactivate(self, current_time):
         self.active = False
-        delay = random.uniform(1, 10)
+        delay = random.uniform(REACTIVATION_DELAY_MIN, REACTIVATION_DELAY_MAX)
         self.reactivation_time = current_time + delay
 
     def try_reactivate(self, current_time):
@@ -96,6 +106,7 @@ class Uranium:
             if current_time >= self.reactivation_time:
                 self.active = True
                 self.reactivation_time = None
+
 
 uranium_nuclei = []
 for i in range(0, 36):
@@ -140,7 +151,7 @@ while running:
 
             for neutron in neutrons[:]:
                 dist = math.hypot(neutron.x - nucleus.x, neutron.y - nucleus.y)
-                if dist < 12 + 4:
+                if dist < COLLISION_DISTANCE:
                     nucleus.deactivate(sim_time)
                     neutrons.remove(neutron)
                     
