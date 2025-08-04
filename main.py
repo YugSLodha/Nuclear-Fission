@@ -2,6 +2,7 @@ import pygame
 import sys
 import random
 import math
+import time
 
 pygame.init()
 
@@ -20,11 +21,12 @@ NEUTRON_COLOR = (0, 255, 255)
 
 clock = pygame.time.Clock()
 FPS = 60
-
+PURITY=0.05
+NON_FISSILE=0.01
 NEUTRON_RADIUS = 4
 NEUTRON_SPEED = 1
-GRID_CELL_SIZE = 40
-
+GRID_CELL_SIZE = 20
+sim_time = 0
 RIGHT = 0
 DOWN = math.pi / 2
 LEFT = math.pi
@@ -61,30 +63,53 @@ class Neutron:
         return self.x < 0 or self.x > WIDTH or self.y < 0 or self.y > HEIGHT
 
 class Uranium:
-    def __init__(self, x, y):
+    def __init__(self, x, y, fissile=True):
         self.x = x
         self.y = y
-        self.active = True
+        self.fissile = fissile
+
+        if self.fissile:
+            self.active = random.random() < PURITY
+        else:
+            self.active = True
+
+        self.reactivation_time = None
+        self.deactivated_time = None
 
     def draw(self, surface):
         if self.active:
-            pygame.draw.circle(surface, (0, 255, 0), (self.x, self.y), 6)
+            if self.fissile:
+                color = (0, 255, 0)
+            else:
+                color = (100, 100, 100)
         else:
-            pygame.draw.circle(surface, (100, 100, 100), (self.x, self.y), 6)
+            color = (21,71,52)
+        pygame.draw.circle(surface, color, (self.x, self.y), 6)
 
+    def deactivate(self, current_time):
+        self.active = False
+        delay = random.uniform(1, 10)
+        self.reactivation_time = current_time + delay
+
+    def try_reactivate(self, current_time):
+        if not self.active and self.reactivation_time is not None:
+            if current_time >= self.reactivation_time:
+                self.active = True
+                self.reactivation_time = None
 
 uranium_nuclei = []
-for i in range(0, 16):
-        for j in range(0,12):
-            uranium_nuclei.append(Uranium(XgridToPos(i+2), YgridToPos(j+2)))
-
-neutrons = [Neutron(XgridToPos(10), YgridToPos(8), RIGHT)]
-
+for i in range(0, 36):
+        for j in range(0,28):
+            isfissile = random.random() > NON_FISSILE
+            uranium_nuclei.append(Uranium(XgridToPos(i+2), YgridToPos(j+2), isfissile))
+neutrons = [Neutron(XgridToPos(20), YgridToPos(16), RIGHT)]
 paused = True
-
 running = True
 while running:
     clock.tick(FPS)
+    delta_time = clock.get_time() / 1000.0  # Convert milliseconds to seconds
+    if not paused:
+        sim_time += delta_time
     screen.fill(BG_COLOR)
 
     for event in pygame.event.get():
@@ -94,9 +119,11 @@ while running:
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_SPACE:
                 paused = not paused
-                
+
     for nucleus in uranium_nuclei:
+        nucleus.try_reactivate(sim_time)
         nucleus.draw(screen)
+
     for neutron in neutrons[:]:
         neutron.draw(screen)
         
@@ -109,19 +136,19 @@ while running:
 
         for nucleus in uranium_nuclei:
             if not nucleus.active:
-                continue 
+                continue
 
             for neutron in neutrons[:]:
                 dist = math.hypot(neutron.x - nucleus.x, neutron.y - nucleus.y)
                 if dist < 12 + 4:
-                    nucleus.active = False
-                    collision_sound.play()
-
-                    for _ in range(3):
-                        random_angle = random.uniform(0, 2 * math.pi)
-                        neutrons.append(Neutron(nucleus.x, nucleus.y, random_angle))
-
+                    nucleus.deactivate(sim_time)
                     neutrons.remove(neutron)
+                    
+                    if nucleus.fissile:
+                        collision_sound.play()
+                        for _ in range(3):
+                            random_angle = random.uniform(0, 2 * math.pi)
+                            neutrons.append(Neutron(nucleus.x, nucleus.y, random_angle))
                     break
     else:
         pause_text = font.render("Paused", True, (255, 0, 0))
